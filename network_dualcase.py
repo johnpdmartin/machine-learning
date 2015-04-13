@@ -199,6 +199,7 @@ class Network():
         return a
 
     def SGD(self, training_data, epochs, mini_batch_size, eta, numOutputNodes,
+            epochmodelfilename,
             lmbda = 0.0, 
             evaluation_data=None, 
             monitor_evaluation_cost=False,
@@ -256,7 +257,7 @@ class Network():
                 print "Accuracy on evaluation data: {} / {}".format(
                     self.accuracy(evaluation_data,numOutputNodes), n_data)
 
-            self.save("D:/kaggle/otto/results/model_epoch"+str(j))
+            self.save(epochmodelfilename+str(j))
 
         return evaluation_cost, evaluation_accuracy, \
             training_cost, training_accuracy, self.weights, self.biases

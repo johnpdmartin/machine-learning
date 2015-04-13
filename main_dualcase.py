@@ -277,8 +277,10 @@ def plot_linear_case(predicted,originalResponseVar,fn,activationFunction):
 if __name__ == "__main__":
     #-----INPUTS-------
     #fn = ".."+os.sep+"data"+os.sep+"titanic_bin_train_classgender.csv"
-    fn = "D:"+os.sep+"kaggle"+os.sep+"otto"+os.sep+"data"+os.sep+"otto_train_num.csv"
+    fn = ".."+os.sep+"data"+os.sep+"otto_train_num.csv"
     #fn = ".."+os.sep+"data"+os.sep+"example5.csv"
+
+    epochmodelfilename = ".."+os.sep+"results"+os.sep+"model_epoch_"
     discreteCase = True
     ynormalisationFunction = "zero_one" # "minus_one_one" or "zero_one"  choice is active for non discrete case
     activationFunction = "sigmoid" #"sigmoid" or "tanh"
@@ -324,7 +326,7 @@ if __name__ == "__main__":
     LearningRate = 0.1
     Lmbda = 5 # regularization
     model = net.SGD(training_data, numEpochs, numMiniBatches, LearningRate,numOutputNodes,
-                    lmbda= Lmbda, 
+                    epochmodelfilename,lmbda= Lmbda, 
             evaluation_data=validation_data,monitor_evaluation_accuracy=True, 
             monitor_training_accuracy=True,monitor_training_cost=True,monitor_evaluation_cost=True)
 
@@ -341,7 +343,7 @@ if __name__ == "__main__":
 
     a = predicted
 #print a
-    with open("D:/kaggle/otto/results/otto_fit.csv", 'wb') as outcsv:   
+    with open(".."+os.sep+"results"+os.sep+"otto_fit.csv", 'wb') as outcsv:   
     #configure writer to write standard csv file
         writer = csv.writer(outcsv, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL, lineterminator='\n')
         writer.writerow(['number'])
@@ -351,7 +353,7 @@ if __name__ == "__main__":
 
     b = reality
 #print a
-    with open("D:/kaggle/otto/results/otto_trg.csv", 'wb') as outcsv:   
+    with open(".."+os.sep+"results"+os.sep+"otto_trg.csv", 'wb') as outcsv:   
     #configure writer to write standard csv file
         writer = csv.writer(outcsv, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL, lineterminator='\n')
         writer.writerow(['number'])
@@ -365,7 +367,7 @@ if __name__ == "__main__":
         plot_linear_case(predicted,originalResponseVar,fn,ynormalisationFunction)
 
 
-    prediction_input = readIn_PredictionData("D:"+os.sep+"kaggle"+os.sep+"otto"+os.sep+"data"+os.sep+"otto_test_num.csv",dfmax,dfmin,transformationFunction)
+    prediction_input = readIn_PredictionData(".."+os.sep+"data"+os.sep+"otto_test_num.csv",dfmax,dfmin,transformationFunction)
     prediction_datamatrix = createPredictionDataMatrix(prediction_input)
     predicted_newfile = net.predict(prediction_datamatrix,numOutputNodes)
     print "predicted survived ", sum(predicted_newfile[0])
@@ -374,7 +376,7 @@ if __name__ == "__main__":
     a = predicted_newfile[1]  # for softmax 0-8 for sigmoid 0-1
 
 #print a
-    with open("D:/kaggle/otto/results/otto_pred.csv", 'wb') as outcsv:   
+    with open(".."+os.sep+"results"+os.sep+"otto_pred.csv", 'wb') as outcsv:   
     #configure writer to write standard csv file
         writer = csv.writer(outcsv, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL, lineterminator='\n')
         writer.writerow(['number', 'number', 'number', 'number', 'number', 'number', 'number', 'number', 'number'])
