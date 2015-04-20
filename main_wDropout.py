@@ -6,7 +6,7 @@ Created on Sat Mar  7 19:10:16 2015
 """
 
 import os
-import network_dualcase
+import network_wDropout
 import numpy as np
 import pandas as pd  
 import csv
@@ -277,43 +277,43 @@ def plot_linear_case(predicted,originalResponseVar,fn,activationFunction):
 if __name__ == "__main__":
     #-----INPUTS-------
     #fn = ".."+os.sep+"data"+os.sep+"titanic_bin_train_classgender.csv"
-    fn = ".."+os.sep+"data"+os.sep+"otto_train_num.csv"
+    fn = ".."+os.sep+"data"+os.sep+"otto_train_numeq.csv"
     #fn = ".."+os.sep+"data"+os.sep+"example5.csv"
 
     epochmodelfilename = ".."+os.sep+"results"+os.sep+"model_epoch_"
     discreteCase = True
     costFunction = "LogLossCost" # "QuadraticCost", "CrossEntropyCost", "LogLossCost"
     ynormalisationFunction = "zero_one" # "minus_one_one" or "zero_one"  choice is active for non discrete case
-    activationFunction = "softplus" #"sigmoid", "tanh" or "softplus
+    activationFunction = "relu" #"sigmoid", "tanh" or "softplus
     outputactivationFunction = "softmax" # activationFunction, "linear", "softmax", "sigmoid" or "tanh"
     # for multinomial classification; LogLoss & softmax; crossentropy & sigmoid are useful pairings
     transformationFunction = "log" # none, bin, binlog, log (0 -> 0.5 edit), sqrt, boxcox   
     overSample = "False" #  "False, "True"
 
     if costFunction == "CrossEntropyCost":
-        CostFunction = network_dualcase.CrossEntropyCost
+        CostFunction = network_wDropout.CrossEntropyCost
     elif costFunction == "LogLossCost":
-        CostFunction = network_dualcase.LogLossCost
+        CostFunction = network_wDropout.LogLossCost
     elif costFunction == "QuadraticCost":
-        CostFunction = network_dualcase.QuadraticCost
+        CostFunction = network_wDropout.QuadraticCost
 
     if activationFunction == "tanh":
-        ActivationFunction = network_dualcase.TanhActivation
+        ActivationFunction = network_wDropout.TanhActivation
     elif activationFunction == "softplus":
-        ActivationFunction = network_dualcase.SoftPlusActivation
+        ActivationFunction = network_wDropout.SoftPlusActivation
     elif activationFunction == "relu":
-        ActivationFunction = network_dualcase.ReLUActivation
+        ActivationFunction = network_wDropout.ReLUActivation
     else:
-        ActivationFunction = network_dualcase.SigmoidActivation
+        ActivationFunction = network_wDropout.SigmoidActivation
 
     if outputactivationFunction == "tanh":
-        OutputActivationFunction = network_dualcase.TanhActivation
+        OutputActivationFunction = network_wDropout.TanhActivation
     elif outputactivationFunction == "sigmoid":
-        OutputActivationFunction = network_dualcase.SigmoidActivation
+        OutputActivationFunction = network_wDropout.SigmoidActivation
     elif outputactivationFunction == "linear":
-        OutputActivationFunction = network_dualcase.LinearActivation
+        OutputActivationFunction = network_wDropout.LinearActivation
     elif outputactivationFunction == "softmax":
-        OutputActivationFunction = network_dualcase.SoftMaxActivation
+        OutputActivationFunction = network_wDropout.SoftMaxActivation
         
     
     trainingProportion=0.9
@@ -327,25 +327,29 @@ if __name__ == "__main__":
 
             
     # 100 & 6 best score 80/90 for validation
-    numNodesInHiddenLayer = 50
+    numNodesInHiddenLayer = 500
     #numNodesInHiddenLayer2 = 0
-    net = network_dualcase.Network([numVariables, numNodesInHiddenLayer,30, numOutputNodes], 
+    net = network_wDropout.Network([numVariables, numNodesInHiddenLayer,300, numOutputNodes], 
                                    cost=CostFunction,
                                    mainActivationFunction=ActivationFunction,
                                    mainOutputActivationFunction=OutputActivationFunction)
 
-    numEpochs = 300
+    numEpochs = 1200
     numMiniBatches = 20
-    LearningRate = .05  # used .1-.5 (.01-.05) for sigmoid (softplus) activation of hidden layers
-    Lmbda = 1 # regularization used 1 (1) for sigmoid (softplus) activation of hidden layers
+    LearningRate = .5
+    Lmbda = 1 # regularization
     model = net.SGD(training_data, numEpochs, numMiniBatches, LearningRate,numOutputNodes,
-                    epochmodelfilename,learningRate=LearningRate,lmbda= Lmbda, 
+                    epochmodelfilename,lmbda= Lmbda, 
             evaluation_data=validation_data,monitor_evaluation_accuracy=True, 
             monitor_training_accuracy=True,monitor_training_cost=True,monitor_evaluation_cost=True)
 
-    df_wgts_output = pd.DataFrame(model[4][1])
+#    df_wgts_hidden = pd.DataFrame(model[4][0])
+#    print df_wgts_hidden
+#    df_bias_hidden = pd.DataFrame(model[5][0])
+#    print df_bias_hidden
+#    df_wgts_output = pd.DataFrame(model[4][1])
 #    print df_wgts_output
-    df_bias_output = pd.DataFrame(model[5][1])
+#    df_bias_output = pd.DataFrame(model[5][1])
 #    print df_bias_output
     
     predicted,fulloutput = net.predict(pred_input,numOutputNodes)
@@ -400,30 +404,7 @@ if __name__ == "__main__":
     outcsv.close
 
 
-    #fig,ax = plt.subplots(nrows=1,ncols=1)
-    #fig.subplots_adjust(hspace=0.2)
-    if discreteCase == False:
-            fig = plt.figure()
-            ax = plt.subplot(111) 
-            predicted = np.array([elem[0][0] for elem in predicted])
-            predicted = unnormalize_ybnd(predicted,np.max(dy),np.min(dy))
-            real_dy = dy
-            residuals = np.subtract(predicted,real_dy)
-            ax.scatter(real_dy,real_dy,c='r')
-            ax.scatter(real_dy,predicted)
-            plt.show()
-    #fig,ax = plt.subplots(nrows=1,ncols=1)
-    #fig.subplots_adjust(hspace=0.2)
-    else:
-            fig = plt.figure()
-            ax = plt.subplot(111) 
-            pred_dy = np.array(predicted)
-            real_dy = reality
-            residuals = np.subtract(pred_dy,real_dy)
-            ax.scatter(real_dy,real_dy,c='r')
-            ax.scatter(real_dy,pred_dy)
-            plt.show()
-
+ 
 
 # another print method slow with [ & ] as content 
 #with open("D:/kaggle/otto/data/otto_pred.csv", 'wb') as f:

@@ -129,7 +129,7 @@ class LinearActivation:
     @staticmethod    
     def derivative_activation_function(z):
         return np.ones((len(z),1))
-
+        
 class SoftPlusActivation:
     @staticmethod
     def apply_activation_function(z):
@@ -141,7 +141,6 @@ class SoftPlusActivation:
 class ReLUActivation:
     @staticmethod
     def apply_activation_function(z):
-        print z
         return  np.max(0.0,z)
     @staticmethod    
     def derivative_activation_function(z):
@@ -150,8 +149,13 @@ class ReLUActivation:
         else:
             val = 1.0
         return val
+        
 
-           
+def number_of_nodes(vecOfPairs):
+    t = 0
+    for pair in vecOfPairs:
+        t+= pair[1]
+    return t                   
 #### Main Network class
 class Network():
 
@@ -171,46 +175,188 @@ class Network():
         self.num_layers = len(sizes)
         self.sizes = sizes
         self.default_weight_initializer()
+        self.initializer_node2nodeMap()
         self.cost=cost
         self.activationfunction = mainActivationFunction
         self.outputactivationfunction = mainOutputActivationFunction
 
-    def default_weight_initializer(self):
-        """Initialize each weight using a Gaussian distribution with mean 0
-        and standard deviation 1 over the square root of the number of
-        weights connecting to the same neuron.  Initialize the biases
-        using a Gaussian distribution with mean 0 and standard
-        deviation 1.
+    def initializer_node2nodeMap(self):
+        """this is a default to set sefl.dropoutNodeToNodeMap """
+        nodeToDropMapAllLayers = self.build_node2drop_map(dropoutProportionHiddenLayers=0.0,
+                   dropoutProportionInputLayer=0.0,
+                   dropoutProportionOutputLayer=0.0)
+        node2nodeMap = self.build_node2node_map(nodeToDropMapAllLayers)
+        self.dropoutNodeToNodeMap = node2nodeMap 
+                
+    def initialize_dropout(self,dropoutProportionHiddenLayers=0.5,
+                   dropoutProportionInputLayer=0.0,
+                   dropoutProportionOutputLayer=0.0,epochnum=1):
+        """called at a START or each epoch"""
+        
+        nodeToDropMapAllLayers = self.build_node2drop_map(dropoutProportionHiddenLayers=dropoutProportionHiddenLayers,
+                   dropoutProportionInputLayer=dropoutProportionInputLayer,
+                   dropoutProportionOutputLayer=dropoutProportionOutputLayer)
+        #print nodeToDropMapAllLayers
+        node2nodeMap = self.build_node2node_map(nodeToDropMapAllLayers)
+        #print node2nodeMap        
+        self.dropoutNodeToNodeMap = node2nodeMap 
+        
+        sizes_afteDropout = []                
+        for i in range(len(nodeToDropMapAllLayers)):
+            sizes_afteDropout.append(number_of_nodes(nodeToDropMapAllLayers[i]))
+#        print sizes_afteDropout
+ 
+        self.biases = [np.random.randn(y, 1) for y in sizes_afteDropout[1:]]
+        self.weights = [np.random.randn(y, x)/np.sqrt(x)  
+                    for x, y in zip(sizes_afteDropout[:-1], sizes_afteDropout[1:])]
 
-        Note that the first layer is assumed to be an input layer, and
-        by convention we won't set any biases for those neurons, since
-        biases are only ever used in computing the outputs from later
-        layers.
+        self.make_weights_from_MasterWeighs_afterDropout()
+        self.make_biases_from_MasterBiases_afterDropout()
+        
 
+    def make_weights_from_MasterWeighs_afterDropout(self):
+        """function that copies weights from self.masterWeights into self.weights"""
+        for i in range(len(self.dropoutNodeToNodeMap)-1):
+            node2nodeLayer1 = self.dropoutNodeToNodeMap[i]
+            node2nodeLayer2 = self.dropoutNodeToNodeMap[i+1]   
+            for pairFrom in node2nodeLayer2:
+                for pairTo in node2nodeLayer1:
+                    self.weights[i][pairFrom[1]][pairTo[1]] = self.masterWeights[i][pairFrom[0]][pairTo[0]]
+ 
+
+    def make_biases_from_MasterBiases_afterDropout(self):
+        """function that copies appropriate self.masterBiases into self.biases"""
+        for i in range(1,len(self.dropoutNodeToNodeMap)):
+            node2nodeLayer1 = self.dropoutNodeToNodeMap[i]
+            for pair in node2nodeLayer1:
+                self.biases[i-1][pair[1]][0] = self.masterBiases[i-1][pair[0]][0]
+                    
+#            self.biases = [np.array(b,copy=True) for b in self.masterBiases]
+#            self.weights = [np.array(w,copy=True) for w in self.masterWeights]
+ 
+    def assign_weights_to_MasterWeighs(self):
+        """function that copies weights from self.weights to self.masterWeights """
+        for i in range(len(self.dropoutNodeToNodeMap)-1):
+            node2nodeLayer1 = self.dropoutNodeToNodeMap[i]
+            node2nodeLayer2 = self.dropoutNodeToNodeMap[i+1]   
+            for pairFrom in node2nodeLayer2:
+                for pairTo in node2nodeLayer1:
+                    self.masterWeights[i][pairFrom[0]][pairTo[0]] = self.weights[i][pairFrom[1]][pairTo[1]]
+                    self.masterdupWeights[i][pairFrom[0]][pairTo[0]] = self.weights[i][pairFrom[1]][pairTo[1]] 
+                  
+    def assign_biases_to_MasterBiases(self):
+        """function that copies appropriate self.biases to self.masterBiases """
+        for i in range(1,len(self.dropoutNodeToNodeMap)):
+            node2nodeLayer1 = self.dropoutNodeToNodeMap[i]
+            for pair in node2nodeLayer1:
+                self.masterBiases[i-1][pair[0]][0] = self.biases[i-1][pair[1]][0]
+                self.masterdupBiases[i-1][pair[0]][0] = self.biases[i-1][pair[1]][0]
+
+    def assign_halfweights_to_MasterdupWeighs(self):
+        """function that copies weights from self.weights to self.masterWeights """
+
+        self.masterdupWeights = [x for x in self.masterdupWeights] #*(1-dropoutProportion)
+                   
+    def assign_halfbiases_to_MasterdupBiases(self):
+        """function that copies appropriate self.biases to self.masterBiases """
+
+        self.masterdupBiases = [x for x in self.masterdupBiases] #*(1-dropoutProportion)
+
+    def assign_halfweights_to_MasterWeighs(self):
+        """function that copies weights from self.weights to self.masterWeights """
+
+        self.masterWeights = [x for x in self.masterWeights] 
+                   
+    def assign_halfbiases_to_MasterBiases(self):
+        """function that copies appropriate self.biases to self.masterBiases """
+
+        self.masterBiases = [x for x in self.masterBiases] 
+
+    def adjust_for_dropout(self):
+        """this function is called at the END of EACH EPOCH!!!
+        This function assigns the weight found during an epoch iteration
+        to the self.masterWeights and self.masterBiases.
         """
-        self.biases = [np.random.randn(y, 1) for y in self.sizes[1:]]
-        self.weights = [np.random.randn(y, x)/np.sqrt(x) 
+        self.assign_biases_to_MasterBiases()
+        self.assign_weights_to_MasterWeighs()
+
+            
+    def build_node2node_map(self,nodeToDropMapAllLayers):
+        """call AFTER build_node2drop_map()
+        contains [[(2,0),(3,1)],[(0,0),(2,1),(3,2),(5,3)],...]        
+        """
+        node2nodeMap = []
+        for layer_vec in nodeToDropMapAllLayers:
+            formed_pairs = []
+            count = 0
+            for pair in layer_vec:
+                if pair[1] > 0:
+                    formed_pairs.append((pair[0],count))
+                    count += 1
+            node2nodeMap.append(formed_pairs)
+        return node2nodeMap
+        
+        
+    def build_node2drop_map(self,dropoutProportionHiddenLayers=0.5,
+                   dropoutProportionInputLayer=0.0,
+                   dropoutProportionOutputLayer=0.0):
+        nodeToDropMap = []
+        for i in range(len(self.sizes)):
+            if i > 0 and i < len(self.sizes)-1 : #--input layer case
+                new_layer = self.form_layer_map(self.sizes[i],dropoutProportion = dropoutProportionHiddenLayers)
+            elif i == 0: #---input layer
+                new_layer = self.form_layer_map(self.sizes[i],dropoutProportion = dropoutProportionInputLayer)
+            elif i == len(self.sizes)-1: #output layer  
+                new_layer = self.form_layer_map(self.sizes[i],dropoutProportion = dropoutProportionOutputLayer)                                             
+            nodeToDropMap.append(new_layer)
+        return nodeToDropMap
+               
+                       
+    def form_layer_map(self,size,dropoutProportion = 0.0):            
+        layer_map = []
+        sum_ = 0
+        layer_nodelist = [ i for i in range(size)]
+        dropout_list = random.sample(layer_nodelist,int(size*dropoutProportion))
+#        print layer_nodelist
+#        print dropout_list
+        layer_sel_list = [1 for i in range(size)]
+        for i in dropout_list:
+            layer_sel_list[i] = 0
+#        print layer_sel_list
+        
+        for i in range(size):
+#            random_number = np.random.uniform(0,1)
+#            if random_number >= dropoutProportion:
+            if layer_sel_list[i] == 1:
+                layer_map.append((i,1))
+                sum_ += 1
+        else:
+                layer_map.append((i,0))
+                
+        #if random selection made all 0, then pick one non-zero at random
+        if sum_ < 1:
+            layer_map = []
+            j = np.random.randint(0,size-1)
+            for i in range(size):
+                if i != j:
+                    layer_map.append((i,0))
+                else:
+                    layer_map.append((i,1))
+        return layer_map 
+
+    def default_weight_initializer(self):
+        self.masterBiases = [np.random.randn(y, 1) for y in self.sizes[1:]]
+        self.masterWeights = [np.random.randn(y, x)/np.sqrt(x) 
                         for x, y in zip(self.sizes[:-1], self.sizes[1:])]
+        self.masterdupBiases = self.masterBiases
+        self.masterdupWeights = self.masterWeights
 
     def large_weight_initializer(self):
-        """Initialize the weights using a Gaussian distribution with mean 0
-        and standard deviation 1.  Initialize the biases using a
-        Gaussian distribution with mean 0 and standard deviation 1.
-
-        Note that the first layer is assumed to be an input layer, and
-        by convention we won't set any biases for those neurons, since
-        biases are only ever used in computing the outputs from later
-        layers.
-
-        This weight and bias initializer uses the same approach as in
-        Chapter 1, and is included for purposes of comparison.  It
-        will usually be better to use the default weight initializer
-        instead.
-
-        """
-        self.biases = [np.random.randn(y, 1) for y in self.sizes[1:]]
-        self.weights = [np.random.randn(y, x) 
+        self.masterBiases = [np.random.randn(y, 1) for y in self.sizes[1:]]
+        self.masterWeights = [np.random.randn(y, x) 
                         for x, y in zip(self.sizes[:-1], self.sizes[1:])]
+        self.masterdupBiases = self.masterBiases
+        self.masterdupWeights = self.masterWeights
 
     def feedforward(self, a):
         """Return the output of the network if ``a`` is input."""
@@ -223,8 +369,30 @@ class Network():
                 a = (self.outputactivationfunction).apply_activation_function(np.dot(w, a)+b)
         return a
 
+    def feedforward_wholedupnetwork(self, a):
+        """Return the output of the network if ``a`` is input."""
+        count = len(self.masterdupWeights) + 1
+        for b, w in zip(self.masterdupBiases, self.masterdupWeights):
+            count = count - 1
+            if count != 1:
+                a = (self.activationfunction).apply_activation_function(np.dot(w, a)+b)
+            else:
+                a = (self.outputactivationfunction).apply_activation_function(np.dot(w, a)+b)
+        return a
+
+    def feedforward_wholenetwork(self, a):
+        """Return the output of the network if ``a`` is input."""
+        count = len(self.masterWeights) + 1
+        for b, w in zip(self.masterBiases, self.masterWeights):
+            count = count - 1
+            if count != 1:
+                a = (self.activationfunction).apply_activation_function(np.dot(w, a)+b)
+            else:
+                a = (self.outputactivationfunction).apply_activation_function(np.dot(w, a)+b)
+        return a
+
     def SGD(self, training_data, epochs, mini_batch_size, eta, numOutputNodes,
-            epochmodelfilename,learningRate,
+            epochmodelfilename,
             lmbda = 0.0, 
             evaluation_data=None, 
             monitor_evaluation_cost=False,
@@ -255,6 +423,12 @@ class Network():
         evaluation_cost, evaluation_accuracy = [], []
         training_cost, training_accuracy = [], []
         for j in xrange(epochs):
+            dropoutProportion = 0.5
+            
+#            if j ==0:
+            self.initialize_dropout(dropoutProportionHiddenLayers=dropoutProportion,
+                                    dropoutProportionInputLayer=0.0,
+                                    dropoutProportionOutputLayer=0.0)
             random.shuffle(training_data)
 #            random.shuffle(training_data[0:10416])
 #            random.shuffle(training_data[10417:24926])
@@ -268,15 +442,16 @@ class Network():
             mini_batches = [
                 training_data[k:k+mini_batch_size]
                 for k in xrange(0,n, mini_batch_size)]
-            
-            
+ 
 #            mini_batches = [
 #                training_data[k:n:mini_batch_size]
 #                for k in xrange(0, mini_batch_size)]
 #            print len(mini_batches[1])        
             for mini_batch in mini_batches:
-                self.update_mini_batch(
-                    mini_batch, eta, lmbda, len(training_data))
+                self.update_mini_batch(mini_batch, eta, 
+                                       lmbda, len(training_data))
+#            print self.weights
+#            print self.biases
             print "Epoch %s training complete" % j
             if monitor_training_cost:
                 cost = self.total_cost(training_data, lmbda,numOutputNodes)
@@ -297,12 +472,36 @@ class Network():
                 print "Accuracy on evaluation data: {} / {}".format(
                     self.accuracy(evaluation_data,numOutputNodes), n_data)
 
+                self.assign_halfweights_to_MasterdupWeighs()
+                self.assign_halfbiases_to_MasterdupBiases()
+                if monitor_evaluation_accuracy:
+                    accuracy = self.accuracy_wholedupnetwork(evaluation_data,numOutputNodes)
+                    evaluation_accuracy.append(accuracy)
+                    print "Accuracy of TOTAL network on evaluation data: {} / {}".format(
+                        self.accuracy_wholedupnetwork(evaluation_data,numOutputNodes), n_data)
+
+            self.adjust_for_dropout()
+
             self.save(epochmodelfilename+str(j))
-            eta = eta-learningRate/float(epochs)
+            eta = eta-0.5/float(epochs)
             print eta
 
+        
+            if j == epochs-1:
+            
+                print "got here"
+                self.assign_halfweights_to_MasterWeighs()
+                self.assign_halfbiases_to_MasterBiases()
+                if monitor_evaluation_accuracy:
+                    accuracy = self.accuracy_wholenetwork(evaluation_data,numOutputNodes)
+                    evaluation_accuracy.append(accuracy)
+                    print "Accuracy of TOTAL network on evaluation data: {} / {}".format(
+                        self.accuracy_wholenetwork(evaluation_data,numOutputNodes), n_data)
+            
+        
+        
         return evaluation_cost, evaluation_accuracy, \
-            training_cost, training_accuracy, self.weights, self.biases
+            training_cost, training_accuracy, self.masterWeights, self.masterBiases
 
     def update_mini_batch(self, mini_batch, eta, lmbda, n):
         """Update the network's weights and biases by applying gradient
@@ -314,6 +513,7 @@ class Network():
         """
         nabla_b = [np.zeros(b.shape) for b in self.biases]
         nabla_w = [np.zeros(w.shape) for w in self.weights]
+        #rand_w = [np.multiply(np.random.randint(0,2,w.shape),.1) for w in self.weights]
         for x, y in mini_batch:
             delta_nabla_b, delta_nabla_w = self.backprop(x, y)
             nabla_b = [nb+dnb for nb, dnb in zip(nabla_b, delta_nabla_b)]
@@ -407,6 +607,38 @@ class Network():
                 return sum(elem for elem in results)/len(results)  # MSE function
             
 
+    def accuracy_wholenetwork(self, data, numOutputNodes,convert=False):
+
+        
+        if numOutputNodes >1:
+            if convert:
+                results = [(np.argmax(self.feedforward_wholenetwork(x)), np.argmax(y)) 
+                           for (x, y) in data]
+            else:
+                results = [(np.argmax(self.feedforward_wholenetwork(x)), y)
+                            for (x, y) in data]
+            return sum(int(x == y) for (x, y) in results) # confusion matrix count
+        else:
+                results = [(self.feedforward_wholenetwork(x) - y)**2  for (x, y) in data]
+                return sum(elem for elem in results)/len(results)  # MSE function
+
+
+    def accuracy_wholedupnetwork(self, data, numOutputNodes,convert=False):
+
+        
+        if numOutputNodes >1:
+            if convert:
+                results = [(np.argmax(self.feedforward_wholedupnetwork(x)), np.argmax(y)) 
+                           for (x, y) in data]
+            else:
+                results = [(np.argmax(self.feedforward_wholedupnetwork(x)), y)
+                            for (x, y) in data]
+            return sum(int(x == y) for (x, y) in results) # confusion matrix count
+        else:
+                results = [(self.feedforward_wholedupnetwork(x) - y)**2  for (x, y) in data]
+                return sum(elem for elem in results)/len(results)  # MSE function
+
+
     def total_cost(self, data, lmbda,numOutputNodes, convert=False):
         """Return the total cost for the data set ``data``.  The flag
         ``convert`` should be set to False if the data set is the
@@ -427,8 +659,8 @@ class Network():
     def save(self, filename):
         """Save the neural network to the file ``filename``."""
         data = {"sizes": self.sizes,
-                "weights": [w.tolist() for w in self.weights],
-                "biases": [b.tolist() for b in self.biases],
+                "weights": [w.tolist() for w in self.masterWeights],
+                "biases": [b.tolist() for b in self.masterBiases],
                 "cost": str(self.cost.__name__)}
         f = open(filename, "w")
         json.dump(data, f)
